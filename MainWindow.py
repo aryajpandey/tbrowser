@@ -260,9 +260,14 @@ class MainWindow(QMainWindow):
             
     def eventFilter(self, obj, event):
         try:
-            # Qt5/Qt6 compatibility
-            is_keypress = (event.type() == (QEvent.Type.KeyPress if USING_QT6 else QEvent.KeyPress))
-            if not is_keypress:
+            # Qt5/Qt6 compatibility shims
+            KeyPressType   = (QEvent.Type.KeyPress if USING_QT6 else QEvent.KeyPress)
+            ShortcutOvType = (QEvent.Type.ShortcutOverride if USING_QT6 else QEvent.ShortcutOverride)
+
+            evt_type = event.type()
+
+            # We handle BOTH KeyPress and ShortcutOverride.
+            if evt_type not in (KeyPressType, ShortcutOvType):
                 return super().eventFilter(obj, event)
 
             key  = event.key()
@@ -278,41 +283,53 @@ class MainWindow(QMainWindow):
 
             TabKey     = (Qt.Key.Key_Tab     if USING_QT6 else Qt.Key_Tab)
             BackTabKey = (Qt.Key.Key_Backtab if USING_QT6 else Qt.Key_Backtab)
+            PageUpKey   = (Qt.Key.Key_PageUp   if USING_QT6 else Qt.Key_PageUp)
+            PageDownKey = (Qt.Key.Key_PageDown if USING_QT6 else Qt.Key_PageDown)
             HKey       = (Qt.Key.Key_H       if USING_QT6 else Qt.Key_H)
 
             is_tab     = (key == TabKey)
             is_backtab = (key == BackTabKey)
 
             # ---------- Tab switching ----------
-            # Ctrl+Shift+Tab or BackTab → previous tab
+            # Ctrl+Shift+Tab or Backtab → previous tab
             if ctrl and (is_backtab or (shift and is_tab)):
+                if evt_type == ShortcutOvType:
+                    event.accept()     # claim the shortcut before QWebEngineView does
                 self.prev_tab()
                 return True
 
             # Ctrl+Tab → next tab
             if ctrl and is_tab and not shift:
+                if evt_type == ShortcutOvType:
+                    event.accept()
                 self.next_tab()
                 return True
 
-            # Optional alternates some users expect:
-            # Ctrl+PageUp / Ctrl+PageDown
-            PageUpKey   = (Qt.Key.Key_PageUp   if USING_QT6 else Qt.Key_PageUp)
-            PageDownKey = (Qt.Key.Key_PageDown if USING_QT6 else Qt.Key_PageDown)
+            # Optional alternates: Ctrl+PageUp / Ctrl+PageDown
             if ctrl and key == PageUpKey:
+                if evt_type == ShortcutOvType:
+                    event.accept()
                 self.prev_tab()
                 return True
+
             if ctrl and key == PageDownKey:
+                if evt_type == ShortcutOvType:
+                    event.accept()
                 self.next_tab()
                 return True
 
             # ---------- History (mac-safe + cross-platform) ----------
             # macOS: Cmd+Shift+H (avoid Cmd+H which is "Hide")
             if meta and shift and key == HKey:
+                if evt_type == ShortcutOvType:
+                    event.accept()
                 self.open_history_tab()
                 return True
 
             # Windows/Linux: Ctrl+H
             if ctrl and key == HKey:
+                if evt_type == ShortcutOvType:
+                    event.accept()
                 self.open_history_tab()
                 return True
 

@@ -42,6 +42,7 @@ def main():
     app.setApplicationName("TBrowser")
 
     win = MainWindow()
+    QApplication.instance().installEventFilter(win)
     win.show()
     sys.exit(app.exec())
    
