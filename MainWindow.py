@@ -1,5 +1,7 @@
 import json
 import os
+from pathlib import Path
+import re
 import time
 from typing import Optional
 
@@ -8,7 +10,7 @@ from BrowserTab import BrowserTab
 from cmd_palette import CommandPalette
 from commands import command_handler
 from shortcuts import shortcuts
-from constants import ASSETS_DIR, HISTORY_FILE
+from constants import ASSETS_DIR, HISTORY_FILE, COMMANDS_JSON
 from utils import to_qurl, read_asset, resource_icon
 
 try:
@@ -419,7 +421,56 @@ class MainWindow(QMainWindow):
         if tab:
             tab.view.setHtml(help_html, QUrl("about:blank"))
             self.tabbar.setTabText(tab_index, "Help")
+    
+    
+    def open_commands_tab(self):
+        # 1) Load the HTML template
+        html = read_asset("browser_pages/commands.html") or ""
 
+        # 2) Load commands.json
+        cmd_path = COMMANDS_JSON if isinstance(COMMANDS_JSON, Path) else Path(COMMANDS_JSON)
+        try:
+            maps = json.loads(cmd_path.read_text(encoding="utf-8")) if cmd_path.exists() else {}
+        except Exception as e:
+            maps = {}
+            print("[maps] failed reading commands.json:", e)
+
+        # 3) Build table rows on the server side (no JS needed)
+        if maps:
+            rows = "\n".join(
+                f'<tr><td class="cmd">/{name}</td><td class="tpl"><code>{template}</code></td></tr>'
+                for name, template in sorted(maps.items())
+            )
+        else:
+            rows = '<tr><td colspan="2" class="empty">No maps found.</td></tr>'
+
+        # 4) Replace the tbody content if present; otherwise, append a full table
+        tbody_pattern = re.compile(
+            r'(<tbody[^>]*id=["\']maps-body["\'][^>]*>)(.*?)(</tbody>)',
+            flags=re.S | re.I
+        )
+        if tbody_pattern.search(html):
+            html = tbody_pattern.sub(rf'\1{rows}\3', html)
+        else:
+            # If the template has no target tbody, append a minimal table
+            table_html = f"""
+            <table>
+            <thead><tr><th>Command</th><th>Template</th></tr></thead>
+            <tbody id="maps-body">
+                {rows}
+            </tbody>
+            </table>
+            """
+            # try to insert before </body>, or just append
+            html = html.replace("</body>", table_html + "\n</body>") if "</body>" in html else html + table_html
+
+        # 5) Show the page
+        tab_index = self.new_tab(QUrl("about:blank"), private=False)
+        tab = self.current_tab()
+        if tab:
+            tab.view.setHtml(html, QUrl("about:blank"))
+            self.tabbar.setTabText(tab_index, "Maps")
+        
     def capture_screenshot(self):
         tab = self.current_tab()
         if not tab:

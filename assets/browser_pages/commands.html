@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Custom Commands</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{--bg:#0f1115;--panel:#151821;--text:#d6e1ff;--muted:#8ea0bf;--accent:#4da3ff;--border:#232838;--chip:#0c0f14}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+      font:14px/1.6 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif}
+    .wrap{max-width:900px;margin:48px auto;padding:0 20px}
+    h1{font-size:28px;margin:0 0 8px;color:var(--accent)}
+    p.subtitle{margin:0 0 24px;color:var(--muted)}
+    table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);
+      border-radius:12px;overflow:hidden}
+    th,td{padding:12px 14px;border-bottom:1px solid var(--border)}
+    th{text-align:left;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+    tr:last-child td{border-bottom:0}
+    td.cmd{white-space:nowrap;font-weight:600}
+    td.tpl code{background:var(--chip);padding:2px 6px;border-radius:6px;color:#cfe3ff}
+    .empty{text-align:center;color:var(--muted);padding:32px 14px}
+    .tip{margin-top:16px;color:var(--muted);font-size:13px}
+    .tip code{background:var(--chip);padding:2px 6px;border-radius:6px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Current Maps</h1>
+    <p class="subtitle">Loaded from your saved command maps. Use them like <code>/name</code>.</p>
+
+    <table>
+      <thead><tr><th>Command</th><th>Template</th></tr></thead>
+      <tbody id="maps-body">
+        <tr><td colspan="2" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+
+    <p class="tip">
+      Add: <code>/map:gh=https://github.com/</code> ·
+      Remove: <code>/unmap:gh</code>
+    </p>
+  </div>
+
+  <!-- Your Python will inject JSON here before setHtml():
+       <script id="maps-data" type="application/json">{"yt":"https://...{q}","gh":"https://github.com"}</script> -->
+  <script id="maps-data" type="application/json"></script>
+
+  <script>
+    (function(){
+      function render(obj){
+        const tbody = document.getElementById('maps-body');
+        tbody.innerHTML = '';
+        const entries = Object.entries(obj || {}).sort((a,b)=>a[0].localeCompare(b[0]));
+        if(!entries.length){
+          tbody.innerHTML = '<tr><td colspan="2" class="empty">No maps found.</td></tr>';
+          return;
+        }
+        for(const [name, tpl] of entries){
+          const tr = document.createElement('tr');
+
+          const tdCmd = document.createElement('td');
+          tdCmd.className = 'cmd';
+          tdCmd.textContent = '/' + name;
+
+          const tdTpl = document.createElement('td');
+          tdTpl.className = 'tpl';
+          const code = document.createElement('code');
+          code.textContent = tpl;
+          tdTpl.appendChild(code);
+
+          tr.appendChild(tdCmd);
+          tr.appendChild(tdTpl);
+          tbody.appendChild(tr);
+        }
+      }
+
+      // Read JSON injected by Python
+      try{
+        const tag = document.getElementById('maps-data');
+        const txt = (tag && tag.textContent) ? tag.textContent.trim() : '';
+        render(txt ? JSON.parse(txt) : {});
+      }catch(e){
+        render({});
+      }
+    })();
+  </script>
+</body>
+</html>

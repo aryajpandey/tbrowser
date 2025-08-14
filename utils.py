@@ -1,5 +1,6 @@
 import os
 import urllib
+
 from constants import ASSETS_DIR
 
 
@@ -55,3 +56,4 @@ def read_asset(filename: str) -> str:
             return f.read()
     except Exception:
         return "<html><body><p>Failed to load asset: {}</p></body></html>".format(filename)
+    

@@ -5,6 +5,7 @@ import time
 import urllib.parse
 import json
 from typing import Optional
+from commands import load_user_commands
 
 from cmd_palette import CommandPalette
 from MainWindow import MainWindow
@@ -43,6 +44,7 @@ def main():
 
     win = MainWindow()
     QApplication.instance().installEventFilter(win)
+    load_user_commands()
     win.show()
     sys.exit(app.exec())
    
