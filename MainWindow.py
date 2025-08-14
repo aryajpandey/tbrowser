@@ -1,24 +1,15 @@
-
-import sys
+import json
 import os
 import time
-import urllib.parse
-import json
 from typing import Optional
 
-ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
-HISTORY_FILE = os.path.join(os.path.dirname(__file__), "history", "browser_history.json")
-
-def read_asset(filename: str) -> str:
-    path = os.path.join(ASSETS_DIR, filename)
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read()
-    except Exception:
-        return "<html><body><p>Failed to load asset: {}</p></body></html>".format(filename)
-
-# --- Guarded dual-imports for PyQt6 / PyQt5 compatibility --------------------
-USING_QT6 = False
+import urllib
+from BrowserTab import BrowserTab
+from cmd_palette import CommandPalette
+from commands import command_handler
+from shortcuts import shortcuts
+from constants import ASSETS_DIR, HISTORY_FILE
+from utils import to_qurl, read_asset, resource_icon
 
 try:
     from PyQt6.QtCore import Qt, QUrl, QSize, QEvent
@@ -33,168 +24,19 @@ try:
     USING_QT6 = True
 except Exception:
     from PyQt5.QtCore import Qt, QUrl, QSize, QEvent
-    from PyQt5.QtGui import QAction, QIcon, QKeySequence, QShortcut  # <-- QShortcut here!
-    from PyQt5.QtWidgets import (
-        QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-        QLineEdit, QTabBar, QStackedWidget, QToolButton, QFileDialog, QLabel,
-        QStyle, QMessageBox, QSizePolicy
-    )
-    from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile, QWebEnginePage
-
-# -----------------------------------------------------------------------------
-
-def resource_icon(name: str) -> QIcon:
-    """Return a standard icon for given name or a fallback blank icon."""
-    style = QApplication.instance().style()
-    std_map = {
-        "back": QStyle.StandardPixmap.SP_ArrowBack,
-        "forward": QStyle.StandardPixmap.SP_ArrowForward,
-        "reload": QStyle.StandardPixmap.SP_BrowserReload,
-        "newtab": QStyle.StandardPixmap.SP_FileDialogNewFolder,
-        "history": QStyle.StandardPixmap.SP_DirHomeIcon,
-        "help": QStyle.StandardPixmap.SP_DialogHelpButton,
-        "camera": QStyle.StandardPixmap.SP_ComputerIcon,
-    }
-    if name in std_map:
-        return style.standardIcon(std_map[name])
-    return QIcon()
 
 
-def to_qurl(s: str) -> QUrl:
-    """Smartly coerce a user string into a QUrl (URL or search)."""
-    s = (s or "").strip()
-    if not s:
-        return QUrl("about:blank")
-    # If it looks like a URL without scheme, add https://
-    if "://" not in s and " " not in s and "." in s:
-        s = "https://" + s
-    # If it has spaces and no scheme, treat as search query
-    if "://" not in s:
-        s = "https://www.google.com/search?q=" + urllib.parse.quote(s)
-    return QUrl(s)
-
-
-class BrowserTab(QWidget):
-    def __init__(self, parent=None, url: QUrl = QUrl("about:blank"), private: bool = False):
-        super().__init__(parent)
-        self.private = private
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-
-        self.view = QWebEngineView(self)
-
-        # Set up a private/off-the-record profile when requested
-        if private:
-            profile = QWebEngineProfile(self.view)
-            # Best-effort cross-version incognito:
-            try:
-                # Qt6 API
-                profile.setOffTheRecord(True)  # type: ignore[attr-defined]
-            except Exception:
-                # Qt5 fallback: no persistent storage/cookies/cache
-                try:
-                    profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies)  # type: ignore
-                except Exception:
-                    pass
-                try:
-                    profile.setPersistentStoragePath('')
-                    profile.setCachePath('')
-                except Exception:
-                    pass
-            page = QWebEnginePage(profile, self.view)
-            self.view.setPage(page)
-
-        self.layout.addWidget(self.view)
-        self.view.setUrl(url)
-
-    def title(self) -> str:
-        try:
-            return self.view.title() or "New Tab"
-        except Exception:
-            return "New Tab"
-
-    def url(self) -> QUrl:
-        return self.view.url()
-
-    def is_private(self) -> bool:
-        return self.private
-
-
-class CommandPalette(QFrame):
-    """Translucent bottom command palette with a single-line input."""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("CommandPalette")
-        self.setAutoFillBackground(False)
-
-        self.setStyleSheet("""
-            QFrame#CommandPalette {
-                background-color: rgba(10, 10, 10, 180);
-                border: 1px solid rgba(255, 255, 255, 60);
-                border-radius: 10px;
-            }
-            QLineEdit {
-                background: transparent;
-                color: white;
-                font-family: "Courier New", monospace;
-                font-size: 16px;
-                padding: 10px 14px;
-                border: none;
-                selection-background-color: rgba(255,255,255,50);
-            }
-        """)
-
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed if USING_QT6 else QSizePolicy.Fixed)
-
-        self.input = QLineEdit(self)
-        self.input.setPlaceholderText("/nt:<url> | /pt:<url> | /nw | /hist | /help | /capture")
-        self.input.returnPressed.connect(self._on_return)
-
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(8, 8, 8, 8)
-        lay.addWidget(self.input)
-
-        self.hide()
-
-    def _on_return(self):
-        text = self.input.text().strip()
-        if self.parent() and hasattr(self.parent(), "handle_command"):
-            getattr(self.parent(), "handle_command")(text)
-        self.input.clear()
-        self.hide()
-
-    def focusInEvent(self, event):
-        super().focusInEvent(event)
-        self.input.setFocus()
-
-    def toggle(self):
-        if self.isVisible():
-            self.hide()
-        else:
-            # Width ~ 70% of window, height ~ 56 px
-            pw = self.parent().width() if self.parent() else 800
-            ph = self.parent().height() if self.parent() else 600
-            w = int(pw * 0.7)
-            h = 56
-            x = int((pw - w) / 2)
-            y = ph - h - 70  # float above bottom bar
-            self.setGeometry(x, y, w, h)
-            self.show()
-            self.input.setFocus()
-            self.input.setText("/")  # Always start with "/" when palette opens
-
-    def keyPressEvent(self, event):
-        # Close palette on Escape key
-        if event.key() == Qt.Key.Key_Escape if USING_QT6 else Qt.Key_Escape:
-            self.hide()
-            event.accept()
-        else:
-            super().keyPressEvent(event)
-
-
+    
+    
 class MainWindow(QMainWindow):
     windows = []
 
+    @classmethod
+    def new_window(cls):
+        w = cls()
+        cls.windows.append(w)
+        return w
+    
     def _load_history(self):
         try:
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
@@ -236,63 +78,8 @@ class MainWindow(QMainWindow):
             tab.view.reload()
 
     def handle_command(self, text: str):
-        if not text.startswith("/"):
-            QMessageBox.information(self, "Command", "Commands must start with '/'.")
-            return
-
-        parts = text[1:].split(":", 1)
-        cmd = parts[0].strip().lower()
-        arg = parts[1].strip() if len(parts) > 1 else ""
-
-        if cmd == "nt":
-            # If no argument, show new_tab.html
-            if not arg:
-                new_tab_html = read_asset("browser_pages/new_tab.html")
-                self.new_tab(QUrl("about:blank"), private=False)
-                tab = self.current_tab()
-                if tab:
-                    tab.view.setHtml(new_tab_html, QUrl("about:blank"))
-            else:
-                url = to_qurl(arg)
-                self.new_tab(url, private=False)
-                
-        elif cmd == "pt":
-            url = to_qurl(arg or "about:blank")
-            self.new_tab(url, private=True)
-        elif cmd == "t":
-            url = to_qurl(arg or "about:blank")
-            tab = self.current_tab()
-            if tab:
-                tab.view.setUrl(url)
-            else:
-                self.new_tab(url, private=False)
-        elif cmd == "nw":
-            win = MainWindow()
-            MainWindow.windows.append(win)
-            win.show()
-        elif cmd == "s":
-            # /s:<text> - search in current tab
-            query = urllib.parse.quote(arg)
-            url = QUrl(f"https://www.google.com/search?q={query}")
-            tab = self.current_tab()
-            if tab:
-                tab.view.setUrl(url)
-            else:
-                self.new_tab(url, private=False)
-        elif cmd == "ts":
-            # /ts:<text> - search in new tab
-            query = urllib.parse.quote(arg)
-            url = QUrl(f"https://www.google.com/search?q={query}")
-            self.new_tab(url, private=False)
-
-        elif cmd == "hist":
-            self.open_history_tab()
-        elif cmd == "help":
-            self.open_help_tab()
-        elif cmd == "capture":
-            self.capture_screenshot()
-        else:
-            QMessageBox.warning(self, "Unknown command", f"Unrecognized command: {text}\nTry /help")
+        command_handler(self, text, new_window_factory=type(self).new_window)
+    
 
             
     def __init__(self):
@@ -392,43 +179,8 @@ class MainWindow(QMainWindow):
         if tab:
             tab.view.setHtml(new_tab_html, QUrl("about:blank"))
 
-
-
-    # --- Shortcuts -----------------------------------------------------------
     def _make_shortcuts(self):
-        self._shortcuts = []  # keep references so shortcuts don't get garbage-collected
-
-        def sc(seq, handler, context=None):
-            s = QShortcut(QKeySequence(seq), self, activated=handler)
-            if context is not None:
-                s.setContext(context)
-            self._shortcuts.append(s)
-            return s
-
-        # Reload
-        sc("Ctrl+R", self.reload_page)
-        sc("Meta+R", self.reload_page)  # macOS
-
-        # Back/Forward
-        sc("Ctrl+Left", self.go_back)
-        sc("Meta+Left", self.go_back)
-        sc("Ctrl+Right", self.go_forward)
-        sc("Meta+Right", self.go_forward)
-
-        # Toggle palette with "/"
-        sc("/", self.palette.toggle)
-
-        # Close current tab
-        sc("Ctrl+W", self.close_current_tab)
-        sc("Meta+W", self.close_current_tab)
-
-        # History
-        sc("Ctrl+H", self.open_history_tab, Qt.ShortcutContext.ApplicationShortcut)
-        sc("Meta+Y", self.open_history_tab, Qt.ShortcutContext.ApplicationShortcut)
-
-        # Tab switching (will still back up with the event filter)
-        sc("Ctrl+Tab", self.next_tab, Qt.ShortcutContext.ApplicationShortcut)
-        sc("Ctrl+Shift+Tab", self.prev_tab, Qt.ShortcutContext.ApplicationShortcut)
+        shortcuts(self)
 
 
     # --- Tabs management -----------------------------------------------------
@@ -635,17 +387,3 @@ class MainWindow(QMainWindow):
             self.palette.toggle()  # will recompute geometry
             self.palette.toggle()
         super().resizeEvent(event)
-
-
-def main():
-    app = QApplication(sys.argv)
-    app.setApplicationName("TBrowser")
-
-    win = MainWindow()
-    win.show()
-    sys.exit(app.exec())
-   
-
-
-if __name__ == "__main__":
-    main()
