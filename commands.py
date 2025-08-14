@@ -60,8 +60,15 @@ def command_handler(window, text: str, new_window_factory=None) -> None:
             window.new_tab(url, private=False)
 
     elif cmd == "pt":
-        url = to_qurl(arg or "about:blank")
-        window.new_tab(url, private=True)
+        if not arg:
+            new_ptab_html = read_asset("browser_pages/new-ptab.html")
+            window.new_tab(QUrl("about:blank"), private=False)
+            tab = window.current_tab()
+            if tab:
+                tab.view.setHtml(new_ptab_html, QUrl("about:blank"))
+        else:
+            url = to_qurl(arg)
+            window.new_tab(url, private=False)
 
     elif cmd == "t":
         url = to_qurl(arg or "about:blank")

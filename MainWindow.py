@@ -80,7 +80,8 @@ class MainWindow(QMainWindow):
     def handle_command(self, text: str):
         command_handler(self, text, new_window_factory=type(self).new_window)
     
-
+    def _make_shortcuts(self):
+        shortcuts(self)
             
     def __init__(self):
         super().__init__()
@@ -179,9 +180,6 @@ class MainWindow(QMainWindow):
         if tab:
             tab.view.setHtml(new_tab_html, QUrl("about:blank"))
 
-    def _make_shortcuts(self):
-        shortcuts(self)
-
 
     # --- Tabs management -----------------------------------------------------
     def new_tab(self, url: QUrl, private: bool = False) -> int:
@@ -245,27 +243,84 @@ class MainWindow(QMainWindow):
             current = self.tabbar.currentIndex()
             prev_idx = (current - 1) % count
             self.tabbar.setCurrentIndex(prev_idx)
+    
+    def onew_tab(self):
+        new_tab_html = read_asset("browser_pages/new_tab.html")
+        self.new_tab(QUrl("about:blank"))
+        tab = self.current_tab()
+        if tab:
+            tab.view.setHtml(new_tab_html, QUrl("about:blank"))
+    
+    def onew_ptab(self):
+        new_tab_html = read_asset("browser_pages/new-ptab.html")
+        self.new_tab(QUrl("about:blank"))
+        tab = self.current_tab()
+        if tab:
+            tab.view.setHtml(new_tab_html, QUrl("about:blank"))
             
     def eventFilter(self, obj, event):
         try:
-            if event.type() == (QEvent.Type.KeyPress if USING_QT6 else QEvent.KeyPress):
-                key = event.key()
-                mods = event.modifiers()
+            # Qt5/Qt6 compatibility
+            is_keypress = (event.type() == (QEvent.Type.KeyPress if USING_QT6 else QEvent.KeyPress))
+            if not is_keypress:
+                return super().eventFilter(obj, event)
 
-                ctrl = bool(mods & (Qt.KeyboardModifier.ControlModifier if USING_QT6 else Qt.ControlModifier))
-                shift = bool(mods & (Qt.KeyboardModifier.ShiftModifier if USING_QT6 else Qt.ShiftModifier))
-                is_tab = key == (Qt.Key.Key_Tab if USING_QT6 else Qt.Key_Tab)
-                is_backtab = key == (Qt.Key.Key_Backtab if USING_QT6 else Qt.Key_Backtab)
+            key  = event.key()
+            mods = event.modifiers()
 
-                if ctrl and (is_tab or is_backtab):
-                    if shift or is_backtab:
-                        self.prev_tab()
-                    else:
-                        self.next_tab()
-                    return True
+            CtrlMod  = (Qt.KeyboardModifier.ControlModifier if USING_QT6 else Qt.ControlModifier)
+            ShiftMod = (Qt.KeyboardModifier.ShiftModifier   if USING_QT6 else Qt.ShiftModifier)
+            MetaMod  = (Qt.KeyboardModifier.MetaModifier    if USING_QT6 else Qt.MetaModifier)
+
+            ctrl  = bool(mods & CtrlMod)
+            shift = bool(mods & ShiftMod)
+            meta  = bool(mods & MetaMod)   # Cmd on macOS
+
+            TabKey     = (Qt.Key.Key_Tab     if USING_QT6 else Qt.Key_Tab)
+            BackTabKey = (Qt.Key.Key_Backtab if USING_QT6 else Qt.Key_Backtab)
+            HKey       = (Qt.Key.Key_H       if USING_QT6 else Qt.Key_H)
+
+            is_tab     = (key == TabKey)
+            is_backtab = (key == BackTabKey)
+
+            # ---------- Tab switching ----------
+            # Ctrl+Shift+Tab or BackTab → previous tab
+            if ctrl and (is_backtab or (shift and is_tab)):
+                self.prev_tab()
+                return True
+
+            # Ctrl+Tab → next tab
+            if ctrl and is_tab and not shift:
+                self.next_tab()
+                return True
+
+            # Optional alternates some users expect:
+            # Ctrl+PageUp / Ctrl+PageDown
+            PageUpKey   = (Qt.Key.Key_PageUp   if USING_QT6 else Qt.Key_PageUp)
+            PageDownKey = (Qt.Key.Key_PageDown if USING_QT6 else Qt.Key_PageDown)
+            if ctrl and key == PageUpKey:
+                self.prev_tab()
+                return True
+            if ctrl and key == PageDownKey:
+                self.next_tab()
+                return True
+
+            # ---------- History (mac-safe + cross-platform) ----------
+            # macOS: Cmd+Shift+H (avoid Cmd+H which is "Hide")
+            if meta and shift and key == HKey:
+                self.open_history_tab()
+                return True
+
+            # Windows/Linux: Ctrl+H
+            if ctrl and key == HKey:
+                self.open_history_tab()
+                return True
+
         except Exception:
             pass
+
         return super().eventFilter(obj, event)
+
 
     def _update_tab_title(self, tab: BrowserTab):
         try:

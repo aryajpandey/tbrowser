@@ -40,9 +40,29 @@ def shortcuts(self):
         sc("Meta+W", self.close_current_tab)
 
         # History
-        sc("Ctrl+H", self.open_history_tab, Qt.ShortcutContext.ApplicationShortcut)
-        sc("Meta+Y", self.open_history_tab, Qt.ShortcutContext.ApplicationShortcut)
+        sc("Ctrl+H", self.open_history_tab)
+        sc("Meta+Shift+H", self.open_history_tab)
 
         # Tab switching (will still back up with the event filter)
-        sc("Ctrl+Tab", self.next_tab, Qt.ShortcutContext.ApplicationShortcut)
-        sc("Ctrl+Shift+Tab", self.prev_tab, Qt.ShortcutContext.ApplicationShortcut)
+        sc("Ctrl+Tab", self.next_tab)
+        sc("Ctrl+Shift+Tab", self.prev_tab)
+        
+        # New tab
+        sc("Ctrl+T", self.onew_tab)
+        sc("Meta+T", self.onew_tab)
+        
+        # New private tab
+        sc("Ctrl+Shift+P", self.onew_ptab)
+        sc("Meta+Shift+P", self.onew_ptab)
+        
+        act_next = QAction(self)
+        act_next.setShortcuts([QKeySequence("Ctrl+Tab")])
+        act_next.triggered.connect(self.next_tab)
+        self.addAction(act_next)
+
+        act_prev = QAction(self)
+        act_prev.setShortcuts([QKeySequence("Ctrl+Shift+Tab")])
+        act_prev.triggered.connect(self.prev_tab)
+        self.addAction(act_prev)
+        
+        QApplication.instance().installEventFilter(self)

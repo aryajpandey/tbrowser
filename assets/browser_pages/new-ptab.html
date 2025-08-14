@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tbrowser - New Tab</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #14032a;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    .search-container {
+      text-align: center;
+    }
+    .search-box {
+      width: 500px;
+      max-width: 90%;
+      padding: 12px 20px;
+      font-size: 18px;
+      border: none;
+      border-radius: 50px;
+      outline: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .logo {
+      font-size: 48px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: #4cafef;
+    }
+    .welcome {
+      font-size: 18px;
+      color: #bbb;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="search-container">
+    <div class="logo">tbrowser</div>
+    <div class="welcome">Private Mode</div>
+    <input
+      type="text"
+      class="search-box"
+      placeholder="Search the web..."
+      onkeydown="if(event.key === 'Enter'){search()}"
+    />
+  </div>
+
+  <script>
+    function search() {
+      const query = document.querySelector('.search-box').value.trim();
+      if (query) {
+        window.location.href = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      }
+    }
+  </script>
+</body>
+</html>
